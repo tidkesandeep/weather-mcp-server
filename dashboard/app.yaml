@@ -1,0 +1,14 @@
+command:
+  - "python"
+  - "app.py"
+
+resources:
+  - name: requirements
+    source:
+      path: ./requirements.txt
+
+env:
+  - name: DEFAULT_LOCATION
+    value: "Chicago, IL"
+  - name: FLASK_RUN_PORT
+    value: "8000"

@@ -1,0 +1,122 @@
+[
+  {
+    "question": "What's the weather in Chicago right now?",
+    "tool": "get_current_weather",
+    "result": {
+      "location": "Chicago, Illinois, US",
+      "latitude": 41.85003,
+      "longitude": -87.65005,
+      "temperature_f": 80.5,
+      "conditions": "Partly cloudy",
+      "humidity_pct": 92,
+      "wind_mph": 3.5,
+      "precipitation_mm": 0.0,
+      "as_of": "2026-08-10T13:15"
+    }
+  },
+  {
+    "question": "Will it rain in Austin this weekend?",
+    "tool": "get_forecast(days=7)",
+    "result": {
+      "location": "Austin, Texas, US",
+      "latitude": 30.26715,
+      "longitude": -97.74306,
+      "forecast": [
+        {
+          "date": "2026-08-10",
+          "high_f": 99.4,
+          "low_f": 77.8,
+          "precip_chance_pct": 6,
+          "conditions": "Overcast"
+        },
+        {
+          "date": "2026-08-11",
+          "high_f": 99.4,
+          "low_f": 78.0,
+          "precip_chance_pct": 5,
+          "conditions": "Overcast"
+        },
+        {
+          "date": "2026-08-12",
+          "high_f": 104.2,
+          "low_f": 77.8,
+          "precip_chance_pct": 2,
+          "conditions": "Overcast"
+        },
+        {
+          "date": "2026-08-13",
+          "high_f": 104.5,
+          "low_f": 78.4,
+          "precip_chance_pct": 0,
+          "conditions": "Partly cloudy"
+        },
+        {
+          "date": "2026-08-14",
+          "high_f": 102.4,
+          "low_f": 78.8,
+          "precip_chance_pct": 1,
+          "conditions": "Overcast"
+        },
+        {
+          "date": "2026-08-15",
+          "high_f": 103.3,
+          "low_f": 79.3,
+          "precip_chance_pct": 2,
+          "conditions": "Overcast"
+        },
+        {
+          "date": "2026-08-16",
+          "high_f": 105.3,
+          "low_f": 78.0,
+          "precip_chance_pct": 1,
+          "conditions": "Mainly clear"
+        }
+      ]
+    }
+  },
+  {
+    "question": "Should I bring a jacket and umbrella to Seattle tomorrow?",
+    "tool": "get_travel_recommendation",
+    "result": {
+      "location": "Seattle, Washington, US",
+      "date": "2026-08-11",
+      "high_f": 76.6,
+      "low_f": 55.9,
+      "precip_chance_pct": 3,
+      "conditions": "Clear sky",
+      "umbrella_needed": false,
+      "umbrella_threshold_pct": 40,
+      "jacket": "light",
+      "recommendation": "Skip the umbrella; jacket=light.",
+      "reasoning": "On 2026-08-11 in Seattle, Washington, US: high 76.6\u00b0F / low 55.9\u00b0F, Clear sky, 3% chance of precipitation. Umbrella not required (precip 3% \u2264 40% threshold). A light jacket is recommended (overnight low 55.9\u00b0F < 65\u00b0F)."
+    }
+  },
+  {
+    "question": "What's the weather in Nowhereville, Atlantis?",
+    "tool": "get_current_weather \u2192 error",
+    "result": {
+      "status": "error",
+      "message": "Could not resolve location 'Nowhereville, Atlantis'. Try a clearer city name (e.g. 'Chicago, IL') or 'lat,lon'."
+    }
+  },
+  {
+    "question": "Any severe weather alerts for Miami?",
+    "tool": "get_severe_weather_alerts",
+    "result": {
+      "location": "Miami, Florida, US",
+      "supported": true,
+      "alert_count": 1,
+      "alerts": [
+        {
+          "event": "Heat Advisory",
+          "severity": "Moderate",
+          "headline": "Heat Advisory issued August 10 at 2:38AM EDT until August 10 at 6:00PM EDT by NWS Miami FL",
+          "onset": "2026-08-10T11:00:00-04:00",
+          "ends": "2026-08-10T18:00:00-04:00",
+          "description": "* WHAT...Heat index values up to 109 expected across South Florida.\n\n* WHERE...Coastal Broward County, Coastal Miami Dade County, Coastal\nPalm Beach County, Far South Miami-Dade County, Inland Broward\nCounty, Inland Miami-Dade County, Inland Palm Beach County, Metro\nBroward County, Metro Palm Beach County, and Metropolitan Miami\nDade Counties.\n\n* WHEN...From 11 AM this morning to 6 PM EDT this evening.\n\n* IMPACTS...Hot temperatures and high humidity may cause heat\nillnesses."
+        }
+      ],
+      "message": null
+    }
+  }
+]
