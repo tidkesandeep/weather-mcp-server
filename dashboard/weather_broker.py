@@ -12,6 +12,7 @@ alpaca_broker.py — never hardcode keys.
 
 from __future__ import annotations
 
+import os
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -52,10 +53,11 @@ WMO_CODES: dict[int, str] = {
     99: "Severe thunderstorm with hail",
 }
 
-# Travel-recommendation thresholds (tunable without changing tool signatures).
-UMBRELLA_THRESHOLD_PCT = 40
-LIGHT_JACKET_LOW_F = 65
-WARM_JACKET_LOW_F = 50
+# Travel-recommendation thresholds (tunable via app.yaml / env without
+# changing tool signatures).
+UMBRELLA_THRESHOLD_PCT = int(os.environ.get("UMBRELLA_THRESHOLD_PCT", "40"))
+LIGHT_JACKET_LOW_F = int(os.environ.get("LIGHT_JACKET_LOW_F", "65"))
+WARM_JACKET_LOW_F = int(os.environ.get("WARM_JACKET_LOW_F", "50"))
 
 
 def _describe(code: int | None) -> str:
