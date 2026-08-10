@@ -120,3 +120,13 @@ Guardrails: never invent weather; always call a tool first; on `status=error` as
 GitHub `main` / `develop` and the Databricks App source path under
 `/Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server/` are kept in sync via
 `databricks sync` + `databricks apps deploy`.
+
+## Branching
+
+- `main` — stable submission snapshot
+- `develop` — development mirror (same code at submission time)
+- `cursor/weather-mcp-server-0173` — feature branch used for PR review
+
+GitHub and Databricks workspace path
+`/Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server/` are kept in sync
+via `databricks sync` + `databricks apps deploy`.

@@ -25,3 +25,11 @@ Register the deployed MCP app as an external MCP (streamable HTTP), then attach:
 4. **Agents → Agent Bricks → Create agent** (Custom LLM).
 5. Add the MCP under Tools; paste `SYSTEM_PROMPT.md` into the system prompt.
 6. Evaluate with the sample prompts above, then deploy.
+
+
+## Live deployment (this workspace)
+
+- App: `mcp-weather-forecast`
+- URL: https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com
+- MCP endpoint: https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com/mcp
+- Workspace source: `/Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server/mcp_server`
