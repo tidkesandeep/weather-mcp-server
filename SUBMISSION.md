@@ -30,7 +30,14 @@
 | Workspace source (synced) | `/Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server/` |
 | Dashboard (optional stretch) | Code in `dashboard/`; deploy when an app slot is free |
 
-> Register the MCP endpoint as an external MCP (streamable HTTP), then attach it to an Agent Bricks Custom LLM agent using `agent/SYSTEM_PROMPT.md`.
+> **Register in workspace UI (Agent Bricks / AI Playground):**
+> 1. Open **AI Playground**, pick a **Tools enabled** model.
+> 2. **Tools → Add tool → MCP Servers** → add
+>    `https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com/mcp`
+>    (streamable HTTP). Or **AI Gateway → MCPs → Register** if using Unity Catalog MCP Services.
+> 3. **Agents → Agent Bricks → Create agent** (Custom LLM), attach the MCP tools, paste
+>    [`agent/SYSTEM_PROMPT.md`](agent/SYSTEM_PROMPT.md).
+> 4. Re-run the three demo questions below and capture screenshots for your write-up.
 
 ## Weather API
 
