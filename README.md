@@ -148,3 +148,7 @@ Live tool outputs and answers are recorded in [`SUBMISSION.md`](SUBMISSION.md).
 ## License / data use
 
 Open-Meteo non-commercial free tier (~10k calls/day). NWS data is public domain.
+
+## PR / review branch
+
+Feature work for review also lands on `cursor/weather-mcp-server-0173` before merging to `main` / `develop`.
