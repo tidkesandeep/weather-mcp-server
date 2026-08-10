@@ -2,7 +2,7 @@
 
 **Student:** Sandeep Tidke  
 **Repo:** https://github.com/tidkesandeep/weather-mcp-server  
-**Branches:** `main`, `develop` (identical at `f53af28`+; see latest commit)  
+**Branches:** `main`, `develop`  
 **Date:** 2026-08-10  
 **Workspace:** https://dbc-da72c144-83db.cloud.databricks.com/
 
@@ -10,27 +10,30 @@
 
 | # | Requirement | Status |
 |---|-------------|--------|
-| 1 | FastMCP MCP server, streamable HTTP, `@mcp.tool` | **Done** — `mcp_server/weather_mcp_server.py` |
-| 2 | Separate broker/adapter (all HTTP/parsing) | **Done** — `mcp_server/weather_broker.py` |
-| 3 | Current conditions tool | **Done** — `get_current_weather` |
-| 4 | Multi-day forecast tool | **Done** — `get_forecast` |
-| 5 | Prediction/recommendation with threshold logic | **Done** — `get_travel_recommendation` |
-| 6 | Docstrings (Args/Returns) + clean errors | **Done** |
-| 7 | `requirements.txt` + `app.yaml` for MCP app | **Done** |
-| 8 | Free weather API; no secrets in git | **Done** — Open-Meteo (none) + NWS stretch |
-| 9 | Agent system prompt + tool order/guardrails | **Done** — `agent/SYSTEM_PROMPT.md` |
-| 10 | README (architecture, tools, setup, API/auth) | **Done** |
-| 11 | ≥3 NL demos with tool calls + answers | **Done** (below) |
-| 12 | MCP deployed as Databricks App | **Done** — `mcp-weather-forecast` RUNNING |
-| 13 | GitHub code ↔ Databricks app source in sync | **Done** — verified byte-identical |
-| 14 | Register MCP + Agent Bricks Custom LLM | **Remaining UI step** (cannot create via API) |
-| 15 | Optional dashboard app | **Code done**; not deployed (3-app workspace limit) |
+| 1 | FastMCP MCP server, streamable HTTP | **Done** |
+| 2 | Separate broker/adapter | **Done** — `shared/weather_broker.py` (+ sync into apps) |
+| 3–5 | Current / forecast / recommendation tools | **Done** (+ stretch compare + NWS alerts) |
+| 6 | Docstrings + clean errors | **Done** |
+| 7 | `requirements.txt` + `app.yaml` | **Done** |
+| 8 | Free API; no secrets in git | **Done** (Open-Meteo + NWS) |
+| 9 | Agent system prompt | **Done** — `agent/SYSTEM_PROMPT.md` |
+| 10 | README | **Done** |
+| 11 | ≥3 NL demos with tool calls + answers | **Done** — see transcripts below |
+| 12 | MCP Databricks App deployed | **Done** — `mcp-weather-forecast` RUNNING |
+| 13 | GitHub ↔ app source sync | **Done** |
+| 14 | Agent Bricks UI config screenshot | **Manual follow-up** (SSO blocks automation) |
+| 15 | Optional dashboard app | Code ready; not deployed (3-app limit) |
 
-### Stretch extras included
+### Feedback remediation
 
-- `compare_locations` — multi-city forecast compare  
-- `get_severe_weather_alerts` — US NWS alerts  
-- `dashboard/` Flask UI ready to deploy when a slot frees up  
+| Feedback item | Status |
+|---------------|--------|
+| Agent chat transcripts with tool calls | **Done** — [`docs/demos/AGENT_TRANSCRIPTS.md`](docs/demos/AGENT_TRANSCRIPTS.md) |
+| Error-path transcript (`Nowhereville, Atlantis`) | **Done** — transcript #3 asks for clarification |
+| HTTP retries/backoff | **Done** — urllib3 Retry + exponential backoff |
+| Geocode caching | **Done** — in-process TTL cache |
+| DRY `weather_broker.py` | **Done** — `shared/` + `scripts/sync_shared.py` |
+| Agent Bricks config screenshot | **Needs your UI login** — steps in `docs/demos/FEEDBACK_REMEDIATION.md` |
 
 ## Databricks deployment
 
@@ -39,117 +42,48 @@
 | App | `mcp-weather-forecast` |
 | App URL | https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com |
 | MCP endpoint | https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com/mcp |
-| Health | `/healthz` → 200 |
-| Workspace sync path | `/Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server/` |
-| App source path | `.../weather-mcp-server/mcp_server` |
-| Git folder | `.../weather-mcp-server-repo` tracking GitHub **`develop`** |
+| Workspace source | `/Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server/mcp_server` |
 
-### Remaining UI action (Agent Bricks)
+## Agent transcripts (prompt adherence)
 
-1. **AI Playground** → tools-enabled model → **Tools → MCP Servers** → add  
-   `https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com/mcp`
-2. **Agents → Agent Bricks → Create agent** (Custom LLM).
-3. Attach the MCP tools; paste [`agent/SYSTEM_PROMPT.md`](agent/SYSTEM_PROMPT.md).
-4. Re-run the three demos below and capture screenshots for the write-up.
-
-## Weather API + auth
-
-**Open-Meteo** (primary) — no signup, no API key.  
-**NWS alerts** (stretch) — no API key; US-only.
-
-## Demo transcripts (live tool-equivalent calls)
-
-Captured 2026-08-10 by calling the same broker functions the `@mcp.tool` wrappers use.
-Raw JSON also in [`docs/demos/tool_outputs.json`](docs/demos/tool_outputs.json).
+Generated with Databricks Model Serving (`databricks-meta-llama-3-3-70b-instruct`) using
+`agent/SYSTEM_PROMPT.md` and the **same tool functions** as the deployed MCP server
+(`scripts/run_agent_demos.py`). Full write-up: [`docs/demos/AGENT_TRANSCRIPTS.md`](docs/demos/AGENT_TRANSCRIPTS.md).
 
 ### 1. "What's the weather in Chicago right now?"
 
-**Tool:** `get_current_weather("Chicago")`
+- **Tool:** `get_current_weather({"location":"Chicago, IL"})` → mainly clear, 80.9°F, 93% humidity, 2.7 mph
+- **Final:** Reports those values only (no invented data)
 
-```json
-{
-  "location": "Chicago, Illinois, US",
-  "temperature_f": 80.9,
-  "conditions": "Mainly clear",
-  "humidity_pct": 93,
-  "wind_mph": 2.7,
-  "precipitation_mm": 0.0,
-  "as_of": "2026-08-10T13:30"
-}
-```
+### 2. "Should I bring a jacket and umbrella to Seattle tomorrow?"
 
-**Answer:** Mainly clear in Chicago — about **80.9°F**, humidity **93%**, wind **2.7 mph** (as of 2026-08-10T13:30 local).
+- **Tool:** `get_travel_recommendation({"location":"Seattle","date":"tomorrow"})` → precip 3%, jacket=light
+- **Final:** Skip umbrella (3% < 40% threshold); bring a light jacket (low 55.9°F < 65°F)
 
-### 2. "Will it rain in Austin this weekend?"
+### 3. Error path — "What's the weather in Nowhereville, Atlantis?"
 
-**Tool:** `get_forecast("Austin, TX", days=7)`
+- **Tool:** `get_current_weather(...)` → `{"status":"error","message":"Could not resolve location..."}`
+- **Final:** Does **not** invent weather; asks for a clearer city name or `lat,lon` (guardrail hit)
 
-Weekend (Sat–Sun 2026-08-15 / 2026-08-16):
+## Capture Agent Bricks UI evidence (for full credit)
 
-| Date | High | Low | Precip | Conditions |
-|------|------|-----|--------|------------|
-| 2026-08-15 | 104.4°F | 79.3°F | 2% | Overcast |
-| 2026-08-16 | 105.6°F | 79.2°F | 1% | Mainly clear |
+1. Log into the workspace (Google SSO).
+2. Playground → add MCP URL above → confirm tools list.
+3. Agent Bricks → Custom LLM → attach MCP → paste `agent/SYSTEM_PROMPT.md`.
+4. Screenshot: config with MCP attached.
+5. Re-run the 3 chats above; screenshot tool calls + answers.
+6. Save under `docs/demos/screenshots/` and link here.
 
-**Answer:** Rain looks unlikely — precip ~1–2%. Hot and mostly dry, highs around 104–106°F.
+## Weather API + auth
 
-### 3. "Should I bring a jacket and umbrella to Seattle tomorrow?"
+Open-Meteo (primary, no key) + NWS alerts stretch (no key, US-only).
 
-**Tool:** `get_travel_recommendation("Seattle", "tomorrow")`
+## Robustness notes
 
-```json
-{
-  "date": "2026-08-11",
-  "high_f": 76.6,
-  "low_f": 55.9,
-  "precip_chance_pct": 3,
-  "conditions": "Clear sky",
-  "umbrella_needed": false,
-  "jacket": "light",
-  "recommendation": "Skip the umbrella; jacket=light.",
-  "reasoning": "On 2026-08-11 in Seattle, Washington, US: high 76.6°F / low 55.9°F, Clear sky, 3% chance of precipitation. Umbrella not required (precip 3% ≤ 40% threshold). A light jacket is recommended (overnight low 55.9°F < 65°F)."
-}
-```
+- HTTP: session-level retries for 429/5xx + transport errors with exponential backoff
+- Geocode: TTL cache (default 3600s) to reduce repeated lookups
+- DRY: edit `shared/weather_broker.py`, then `python scripts/sync_shared.py`
 
-**Answer:** Skip the umbrella (3% < 40% threshold). Bring a **light jacket** (overnight low ~56°F).
+## Branching / authorship
 
-### 4. Error handling — "What's the weather in Nowhereville, Atlantis?"
-
-```json
-{
-  "status": "error",
-  "message": "Could not resolve location 'Nowhereville, Atlantis'. Try a clearer city name (e.g. 'Chicago, IL') or 'lat,lon'."
-}
-```
-
-**Answer:** Location could not be resolved — please clarify the city or coordinates.
-
-### 5. Stretch — "Any severe weather alerts for Miami?"
-
-**Tool:** `get_severe_weather_alerts("Miami, FL")` → active **Heat Advisory** (NWS Miami).
-
-## Agent system prompt
-
-Full text: [`agent/SYSTEM_PROMPT.md`](agent/SYSTEM_PROMPT.md)
-
-- Never invent weather — always call a tool first  
-- On `status=error`, ask the user to clarify  
-- Explain recommendation thresholds  
-- NWS alerts are US-only  
-
-## Sync verification (last checked)
-
-| Surface | Result |
-|---------|--------|
-| `origin/main` == `origin/develop` | Same commit |
-| Local `mcp_server/*` vs Workspace path | SHA256 match |
-| Local `mcp_server/*` vs App deployment artifact | SHA256 match |
-| Git folder `weather-mcp-server-repo` | On `develop`, same commit as GitHub |
-| App status | RUNNING / deploy SUCCEEDED |
-| Broker smoke tests | 5/5 passed |
-
-## Branching
-
-- `main` — stable submission  
-- `develop` — development mirror (kept identical for this submission)  
-- Commits authored as **Sandeep Tidke** `<tidke.sandeep4@gmail.com>`
+Commits authored as **Sandeep Tidke** `<tidke.sandeep4@gmail.com>` on `main` and `develop`.

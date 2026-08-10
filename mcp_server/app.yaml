@@ -10,3 +10,9 @@ resources:
 env:
   - name: UMBRELLA_THRESHOLD_PCT
     value: "40"
+  - name: WEATHER_HTTP_MAX_RETRIES
+    value: "3"
+  - name: WEATHER_HTTP_TIMEOUT
+    value: "20"
+  - name: GEOCODE_CACHE_TTL_SEC
+    value: "3600"

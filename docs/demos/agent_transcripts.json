@@ -1,0 +1,102 @@
+[
+  {
+    "question": "What's the weather in Chicago right now?",
+    "transcript": [
+      {
+        "role": "user",
+        "content": "What's the weather in Chicago right now?"
+      },
+      {
+        "role": "tool_call",
+        "tool": "get_current_weather",
+        "arguments": {
+          "location": "Chicago, IL"
+        },
+        "result": {
+          "location": "Chicago, Illinois, US",
+          "latitude": 41.85003,
+          "longitude": -87.65005,
+          "temperature_f": 80.9,
+          "conditions": "Mainly clear",
+          "humidity_pct": 93,
+          "wind_mph": 2.7,
+          "precipitation_mm": 0.0,
+          "as_of": "2026-08-10T13:30",
+          "status": "success"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "The current weather in Chicago is mainly clear with a temperature of 80.9\u00b0F, humidity of 93%, and a wind speed of 2.7 mph. There is no precipitation at the moment."
+      }
+    ],
+    "model": "databricks-meta-llama-3-3-70b-instruct",
+    "system_prompt_source": "agent/SYSTEM_PROMPT.md",
+    "tools_backend": "mcp_server weather tools (same as deployed MCP)"
+  },
+  {
+    "question": "Should I bring a jacket and umbrella to Seattle tomorrow?",
+    "transcript": [
+      {
+        "role": "user",
+        "content": "Should I bring a jacket and umbrella to Seattle tomorrow?"
+      },
+      {
+        "role": "tool_call",
+        "tool": "get_travel_recommendation",
+        "arguments": {
+          "location": "Seattle",
+          "date": "tomorrow"
+        },
+        "result": {
+          "location": "Seattle, Washington, US",
+          "date": "2026-08-11",
+          "high_f": 76.6,
+          "low_f": 55.9,
+          "precip_chance_pct": 3,
+          "conditions": "Clear sky",
+          "umbrella_needed": false,
+          "umbrella_threshold_pct": 40,
+          "jacket": "light",
+          "recommendation": "Skip the umbrella; jacket=light.",
+          "reasoning": "On 2026-08-11 in Seattle, Washington, US: high 76.6\u00b0F / low 55.9\u00b0F, Clear sky, 3% chance of precipitation. Umbrella not required (precip 3% \u2264 40% threshold). A light jacket is recommended (overnight low 55.9\u00b0F < 65\u00b0F).",
+          "status": "success"
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "Based on the forecast for Seattle tomorrow, you won't need an umbrella since there's only a 3% chance of precipitation, which is below the 40% threshold. However, it's recommended to bring a light jacket because the overnight low temperature will be 55.9\u00b0F, which is below 65\u00b0F."
+      }
+    ],
+    "model": "databricks-meta-llama-3-3-70b-instruct",
+    "system_prompt_source": "agent/SYSTEM_PROMPT.md",
+    "tools_backend": "mcp_server weather tools (same as deployed MCP)"
+  },
+  {
+    "question": "What's the weather in Nowhereville, Atlantis?",
+    "transcript": [
+      {
+        "role": "user",
+        "content": "What's the weather in Nowhereville, Atlantis?"
+      },
+      {
+        "role": "tool_call",
+        "tool": "get_current_weather",
+        "arguments": {
+          "location": "Nowhereville, Atlantis"
+        },
+        "result": {
+          "status": "error",
+          "message": "Could not resolve location 'Nowhereville, Atlantis'. Try a clearer city name (e.g. 'Chicago, IL') or 'lat,lon'."
+        }
+      },
+      {
+        "role": "assistant",
+        "content": "The location \"Nowhereville, Atlantis\" could not be resolved. Atlantis is a mythological place and does not exist in reality, and Nowhereville is not a real city. Could you please provide a clearer city name, such as \"Chicago, IL\", or a location in the format \"lat,lon\" (latitude and longitude coordinates)? I'll be happy to help you with the weather once I can resolve the location."
+      }
+    ],
+    "model": "databricks-meta-llama-3-3-70b-instruct",
+    "system_prompt_source": "agent/SYSTEM_PROMPT.md",
+    "tools_backend": "mcp_server weather tools (same as deployed MCP)"
+  }
+]

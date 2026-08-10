@@ -1,29 +1,37 @@
 """
-Open-Meteo weather adapter for the weather-forecast MCP server.
+Open-Meteo / NWS weather adapter (canonical shared module).
 
-Mirrors the role of alpaca_broker.py in Day 3: all HTTP calls and response
-parsing live here so the @mcp.tool wrappers in weather_mcp_server.py stay thin.
+Source of truth: `shared/weather_broker.py`.
+Copied into `mcp_server/` and `dashboard/` by `scripts/sync_shared.py` so each
+Databricks App can deploy from its own folder without drift.
 
-Open-Meteo needs no API key (geocoding + forecast). If you swap in a keyed
-provider (e.g. WeatherAPI.com), add Databricks secret lookup here using the
-same _secret() / WorkspaceClient().secrets.get_secret() pattern as
-alpaca_broker.py — never hardcode keys.
+All HTTP calls and response parsing live here so `@mcp.tool` wrappers stay thin.
+Open-Meteo needs no API key. NWS alerts are US-only (User-Agent required).
 """
 
 from __future__ import annotations
 
+import logging
 import os
+import time
 from datetime import date, datetime, timedelta
+from threading import Lock
 from typing import Any
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+logger = logging.getLogger("weather_broker")
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 NWS_ALERTS_URL = "https://api.weather.gov/alerts/active"
-TIMEOUT = 20
+TIMEOUT = int(os.environ.get("WEATHER_HTTP_TIMEOUT", "20"))
+HTTP_MAX_RETRIES = int(os.environ.get("WEATHER_HTTP_MAX_RETRIES", "3"))
+GEOCODE_CACHE_TTL_SEC = int(os.environ.get("GEOCODE_CACHE_TTL_SEC", "3600"))
+GEOCODE_CACHE_MAX = int(os.environ.get("GEOCODE_CACHE_MAX", "256"))
 
-# WMO weather interpretation codes → short human-readable labels.
 WMO_CODES: dict[int, str] = {
     0: "Clear sky",
     1: "Mainly clear",
@@ -53,11 +61,81 @@ WMO_CODES: dict[int, str] = {
     99: "Severe thunderstorm with hail",
 }
 
-# Travel-recommendation thresholds (tunable via app.yaml / env without
-# changing tool signatures).
 UMBRELLA_THRESHOLD_PCT = int(os.environ.get("UMBRELLA_THRESHOLD_PCT", "40"))
 LIGHT_JACKET_LOW_F = int(os.environ.get("LIGHT_JACKET_LOW_F", "65"))
 WARM_JACKET_LOW_F = int(os.environ.get("WARM_JACKET_LOW_F", "50"))
+
+_session: requests.Session | None = None
+_geocode_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+_geocode_lock = Lock()
+
+
+def _get_session() -> requests.Session:
+    """Shared session with retries/backoff for transient HTTP failures."""
+    global _session
+    if _session is None:
+        retry = Retry(
+            total=HTTP_MAX_RETRIES,
+            connect=HTTP_MAX_RETRIES,
+            read=HTTP_MAX_RETRIES,
+            status=HTTP_MAX_RETRIES,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset({"GET"}),
+            raise_on_status=False,
+            respect_retry_after_header=True,
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        sess = requests.Session()
+        sess.mount("https://", adapter)
+        sess.mount("http://", adapter)
+        _session = sess
+    return _session
+
+
+def _http_get(
+    url: str,
+    *,
+    params: dict[str, Any] | None = None,
+    headers: dict[str, str] | None = None,
+) -> requests.Response:
+    """GET with session retries; raise a clean error if still unsuccessful."""
+    last_exc: Exception | None = None
+    for attempt in range(1, HTTP_MAX_RETRIES + 1):
+        try:
+            resp = _get_session().get(
+                url, params=params, headers=headers, timeout=TIMEOUT
+            )
+            if resp.status_code in (429, 500, 502, 503, 504):
+                wait = min(2 ** (attempt - 1) * 0.5, 8.0)
+                logger.warning(
+                    "HTTP %s from %s (attempt %s/%s); backing off %.1fs",
+                    resp.status_code,
+                    url,
+                    attempt,
+                    HTTP_MAX_RETRIES,
+                    wait,
+                )
+                time.sleep(wait)
+                continue
+            resp.raise_for_status()
+            return resp
+        except requests.RequestException as exc:
+            last_exc = exc
+            wait = min(2 ** (attempt - 1) * 0.5, 8.0)
+            logger.warning(
+                "HTTP error calling %s (attempt %s/%s): %s; backing off %.1fs",
+                url,
+                attempt,
+                HTTP_MAX_RETRIES,
+                exc,
+                wait,
+            )
+            if attempt < HTTP_MAX_RETRIES:
+                time.sleep(wait)
+    raise RuntimeError(
+        f"Upstream weather API failed after {HTTP_MAX_RETRIES} attempts: {last_exc}"
+    )
 
 
 def _describe(code: int | None) -> str:
@@ -74,9 +152,43 @@ def _is_number(text: str) -> bool:
         return False
 
 
+def _cache_get(key: str) -> dict[str, Any] | None:
+    now = time.time()
+    with _geocode_lock:
+        hit = _geocode_cache.get(key)
+        if not hit:
+            return None
+        expires_at, value = hit
+        if expires_at < now:
+            _geocode_cache.pop(key, None)
+            return None
+        return dict(value)
+
+
+def _cache_put(key: str, value: dict[str, Any]) -> None:
+    with _geocode_lock:
+        if len(_geocode_cache) >= GEOCODE_CACHE_MAX:
+            # Drop oldest entries (simple TTL map eviction).
+            for old_key, (exp, _) in sorted(
+                _geocode_cache.items(), key=lambda kv: kv[1][0]
+            )[: max(1, GEOCODE_CACHE_MAX // 8)]:
+                if exp < time.time() or True:
+                    _geocode_cache.pop(old_key, None)
+                    if len(_geocode_cache) < GEOCODE_CACHE_MAX:
+                        break
+        _geocode_cache[key] = (time.time() + GEOCODE_CACHE_TTL_SEC, dict(value))
+
+
+def clear_geocode_cache() -> None:
+    """Test helper: wipe the in-process geocode cache."""
+    with _geocode_lock:
+        _geocode_cache.clear()
+
+
 def resolve_location(location: str) -> dict[str, Any]:
     """Resolve a place name or 'lat,lon' string to coordinates + display name.
 
+    Results are cached in-process (TTL default 1h) to cut repeated geocode calls.
     Raises:
         ValueError: if the location cannot be geocoded.
     """
@@ -84,32 +196,27 @@ def resolve_location(location: str) -> dict[str, Any]:
     if not raw:
         raise ValueError("Location is required (city name or 'lat,lon').")
 
+    cache_key = raw.casefold()
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached
+
     parts = [p.strip() for p in raw.split(",")]
     if len(parts) == 2 and _is_number(parts[0]) and _is_number(parts[1]):
-        return {
+        value = {
             "name": raw,
             "latitude": float(parts[0]),
             "longitude": float(parts[1]),
             "country_code": None,
         }
+        _cache_put(cache_key, value)
+        return value
 
-    # Prefer the full string for geocoding ("Austin, TX"); fall back to city.
-    query = raw
-    resp = requests.get(
-        GEOCODE_URL,
-        params={"name": query, "count": 1},
-        timeout=TIMEOUT,
-    )
-    resp.raise_for_status()
+    resp = _http_get(GEOCODE_URL, params={"name": raw, "count": 1})
     results = resp.json().get("results") or []
 
     if not results and len(parts) > 1:
-        resp = requests.get(
-            GEOCODE_URL,
-            params={"name": parts[0], "count": 1},
-            timeout=TIMEOUT,
-        )
-        resp.raise_for_status()
+        resp = _http_get(GEOCODE_URL, params={"name": parts[0], "count": 1})
         results = resp.json().get("results") or []
 
     if not results:
@@ -122,18 +229,20 @@ def resolve_location(location: str) -> dict[str, Any]:
     label = ", ".join(
         x for x in (hit.get("name"), hit.get("admin1"), hit.get("country_code")) if x
     )
-    return {
+    value = {
         "name": label,
         "latitude": hit["latitude"],
         "longitude": hit["longitude"],
         "country_code": hit.get("country_code"),
     }
+    _cache_put(cache_key, value)
+    return value
 
 
 def get_current_conditions(location: str) -> dict[str, Any]:
     """Current temperature, conditions, humidity, and wind for a location."""
     geo = resolve_location(location)
-    resp = requests.get(
+    resp = _http_get(
         FORECAST_URL,
         params={
             "latitude": geo["latitude"],
@@ -146,9 +255,7 @@ def get_current_conditions(location: str) -> dict[str, Any]:
                 "weather_code,precipitation"
             ),
         },
-        timeout=TIMEOUT,
     )
-    resp.raise_for_status()
     current = resp.json()["current"]
     return {
         "location": geo["name"],
@@ -167,7 +274,7 @@ def get_forecast(location: str, days: int = 5) -> dict[str, Any]:
     """Multi-day daily forecast (high/low, precip chance, conditions)."""
     days = max(1, min(int(days), 16))
     geo = resolve_location(location)
-    resp = requests.get(
+    resp = _http_get(
         FORECAST_URL,
         params={
             "latitude": geo["latitude"],
@@ -180,9 +287,7 @@ def get_forecast(location: str, days: int = 5) -> dict[str, Any]:
                 "precipitation_probability_max,weather_code"
             ),
         },
-        timeout=TIMEOUT,
     )
-    resp.raise_for_status()
     daily = resp.json()["daily"]
     forecast = [
         {
@@ -208,19 +313,17 @@ def _parse_target_date(raw: str | None, forecast_days: list[dict]) -> dict:
         raise ValueError("Forecast is empty.")
 
     if raw is None or str(raw).strip() == "":
-        # Prefer tomorrow when available; otherwise the first forecast day.
         if len(forecast_days) > 1:
             return forecast_days[1]
         return forecast_days[0]
 
     token = str(raw).strip().lower()
     today = date.today()
-    if token in ("today",):
+    if token == "today":
         target = today.isoformat()
-    elif token in ("tomorrow",):
+    elif token == "tomorrow":
         target = (today + timedelta(days=1)).isoformat()
     else:
-        # Validate ISO date.
         try:
             datetime.strptime(token, "%Y-%m-%d")
         except ValueError as exc:
@@ -241,8 +344,8 @@ def _parse_target_date(raw: str | None, forecast_days: list[dict]) -> dict:
 def get_travel_recommendation(location: str, date: str | None = None) -> dict[str, Any]:
     """Derived packing advice from forecast thresholds (not a raw passthrough).
 
-    Rules applied:
-      - umbrella_needed when precip_chance_pct > UMBRELLA_THRESHOLD_PCT (40)
+    Rules:
+      - umbrella_needed when precip_chance_pct > UMBRELLA_THRESHOLD_PCT (default 40)
       - jacket: "warm" if low_f < 50, "light" if low_f < 65, else "none"
     """
     data = get_forecast(location, days=16)
@@ -276,7 +379,9 @@ def get_travel_recommendation(location: str, date: str | None = None) -> dict[st
         )
 
     if jacket == "warm":
-        parts.append(f"Wear a warm jacket (overnight low {low_f}°F < {WARM_JACKET_LOW_F}°F).")
+        parts.append(
+            f"Wear a warm jacket (overnight low {low_f}°F < {WARM_JACKET_LOW_F}°F)."
+        )
     elif jacket == "light":
         parts.append(
             f"A light jacket is recommended (overnight low {low_f}°F < {LIGHT_JACKET_LOW_F}°F)."
@@ -319,9 +424,8 @@ def compare_locations(locations: list[str], days: int = 3) -> dict[str, Any]:
     errors = []
     for loc in cleaned:
         try:
-            forecast = get_forecast(loc, days=days)
-            comparisons.append(forecast)
-        except Exception as exc:  # noqa: BLE001 - surface per-city failures cleanly
+            comparisons.append(get_forecast(loc, days=days))
+        except Exception as exc:  # noqa: BLE001
             errors.append({"location": loc, "error": str(exc)})
 
     return {
@@ -332,11 +436,7 @@ def compare_locations(locations: list[str], days: int = 3) -> dict[str, Any]:
 
 
 def get_severe_weather_alerts(location: str) -> dict[str, Any]:
-    """US severe-weather alerts via the National Weather Service API (stretch).
-
-    NWS is US-only and requires no API key. Non-US locations return a clear
-    message rather than inventing alerts.
-    """
+    """US severe-weather alerts via the National Weather Service API (stretch)."""
     geo = resolve_location(location)
     country = (geo.get("country_code") or "").upper()
     if country and country != "US":
@@ -354,13 +454,11 @@ def get_severe_weather_alerts(location: str) -> dict[str, Any]:
         "User-Agent": "weather-mcp-server/1.0 (tidke.sandeep4@gmail.com)",
         "Accept": "application/geo+json",
     }
-    resp = requests.get(
+    resp = _http_get(
         NWS_ALERTS_URL,
         params={"point": f"{geo['latitude']},{geo['longitude']}"},
         headers=headers,
-        timeout=TIMEOUT,
     )
-    resp.raise_for_status()
     features = resp.json().get("features") or []
     alerts = []
     for feature in features[:10]:

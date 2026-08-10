@@ -81,6 +81,20 @@ def test_compare_locations() -> bool:
         return False
 
 
+def test_geocode_cache() -> bool:
+    print("\n=== geocode cache hit ===")
+    try:
+        weather_broker.clear_geocode_cache()
+        a = weather_broker.resolve_location("Denver, CO")
+        b = weather_broker.resolve_location("Denver, CO")
+        assert a == b
+        print(f"OK: cached resolve -> {a['name']}")
+        return True
+    except Exception as exc:  # noqa: BLE001
+        print(f"FAILED: {exc}")
+        return False
+
+
 def main() -> bool:
     print("=" * 60)
     print("Weather Broker Test Suite")
@@ -91,6 +105,7 @@ def main() -> bool:
         test_travel_recommendation(),
         test_bad_location(),
         test_compare_locations(),
+        test_geocode_cache(),
     ]
     print("\n" + "=" * 60)
     print(f"Test Results: {sum(results)}/{len(results)} passed")

@@ -8,136 +8,107 @@ Patterned after Day 3's `mcp_server/` + `dashboard/` Alpaca split
 
 **Author:** Sandeep Tidke  
 **Repo:** https://github.com/tidkesandeep/weather-mcp-server  
-**Branches:** `main`, `develop` (in sync)
+**Branches:** `main`, `develop` (kept in sync)
 
 ## Requirements status
 
 | Requirement | Status |
 |-------------|--------|
 | FastMCP server, streamable HTTP, `@mcp.tool` | Done — `mcp_server/weather_mcp_server.py` |
-| Broker/adapter (no raw HTTP inside tools) | Done — `mcp_server/weather_broker.py` |
+| Broker/adapter (no raw HTTP inside tools) | Done — `shared/weather_broker.py` (synced into apps) |
 | ≥3 tools: current / forecast / prediction | Done (+2 stretch) |
+| HTTP retries/backoff + geocode cache | Done |
 | `app.yaml` + `requirements.txt` MCP app | Done |
-| Free weather API, no secrets in git | Done — Open-Meteo (keyless) + NWS stretch |
-| Clean errors (no stack traces to agent) | Done — `{"status":"error","message":...}` |
-| Agent system prompt + tool list | Done — `agent/` |
-| README + submission with demos | Done — this file + `SUBMISSION.md` |
+| Free weather API, no secrets in git | Done — Open-Meteo + NWS |
+| Clean errors (`status=error`) | Done |
+| Agent system prompt | Done — `agent/SYSTEM_PROMPT.md` |
+| Agent transcripts with tool calls (+ error path) | Done — [`docs/demos/AGENT_TRANSCRIPTS.md`](docs/demos/AGENT_TRANSCRIPTS.md) |
 | Deployed Databricks App (MCP) | Done — `mcp-weather-forecast` RUNNING |
-| GitHub ↔ Databricks source sync | Done — byte-identical at last deploy |
-| Agent Bricks / Playground registration | **UI step** — paste `/mcp` URL + system prompt (see below) |
-| Optional dashboard Databricks App | Code ready in `dashboard/`; not deployed (workspace 3-app limit) |
+| GitHub ↔ Databricks source sync | Done |
+| Agent Bricks UI config screenshot | **Manual** — see below (SSO blocks automation) |
+| Optional dashboard Databricks App | Code ready; not deployed (3-app limit) |
 
 ## Architecture
 
 ```
-Agent Bricks / AI Playground
-        |  MCP (streamable HTTP)
+Agent Bricks / AI Playground / FMAPI demo agent
+        |  MCP tools (same functions)
         v
-mcp_server/weather_mcp_server.py   ← Databricks App: mcp-weather-forecast
+mcp_server/weather_mcp_server.py   ← App: mcp-weather-forecast
         |
         v
-weather_broker.py
-        ├── Open-Meteo geocoding
+shared/weather_broker.py  (canonical; copied into mcp_server/ + dashboard/)
+        ├── Open-Meteo geocoding (TTL cache) + retries/backoff
         ├── Open-Meteo forecast/current
         └── NWS alerts (US stretch)
-
-dashboard/app.py  (optional human UI; own broker copy — not deployed yet)
 ```
 
-## Live deployment (this workspace)
+## Live deployment
 
 | Item | Value |
 |------|-------|
 | Workspace | https://dbc-da72c144-83db.cloud.databricks.com/ |
-| App name | `mcp-weather-forecast` |
+| App | `mcp-weather-forecast` |
 | App URL | https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com |
 | MCP endpoint | https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com/mcp |
 | Workspace source | `/Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server/` |
-| Git folder | `/Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server-repo` → `develop` |
-
-## Weather API + auth
-
-| API | Purpose | Auth |
-|-----|---------|------|
-| [Open-Meteo](https://open-meteo.com/) geocoding + forecast | Current + multi-day | None |
-| [NWS](https://www.weather.gov/documentation/services-web-api) alerts | US severe weather (stretch) | None (User-Agent only) |
-
-No Databricks secrets required. Do not commit API keys.
 
 ## Tools
 
 | Tool | Capability |
 |------|------------|
 | `get_current_weather(location)` | Temp °F, conditions, humidity, wind |
-| `get_forecast(location, days)` | Daily high/low, precip chance, conditions (1–16) |
-| `get_travel_recommendation(location, date)` | **Derived** umbrella + jacket advice |
-| `compare_locations(locations, days)` | Stretch — side-by-side forecasts |
-| `get_severe_weather_alerts(location)` | Stretch — US NWS active alerts |
+| `get_forecast(location, days)` | Daily high/low, precip chance, conditions |
+| `get_travel_recommendation(location, date)` | Derived umbrella + jacket advice |
+| `compare_locations` / `get_severe_weather_alerts` | Stretch |
 
-### Prediction logic (`get_travel_recommendation`)
+Prediction thresholds (env-tunable): umbrella if precip > 40%; jacket warm `<50°F` / light `<65°F`.
 
-Tunable via `mcp_server/app.yaml` env:
+## Shared broker (DRY)
 
-- **Umbrella** if `precip_chance_pct > UMBRELLA_THRESHOLD_PCT` (default 40)
-- **Jacket** = `warm` if `low_f < 50`, `light` if `low_f < 65`, else `none`
-- Returns flags plus a human-readable `reasoning` string
-
-## Repository layout
-
+```bash
+python scripts/sync_shared.py   # copies shared/weather_broker.py → mcp_server/ + dashboard/
 ```
-mcp_server/     # Databricks App source for mcp-weather-forecast
-dashboard/      # Optional stretch UI (code complete; slot-limited)
-agent/          # SYSTEM_PROMPT.md + AGENT_CONFIG.md
-docs/demos/     # Captured tool outputs
-SUBMISSION.md   # Checklist, URLs, NL demos
-README.md
-```
+
+Databricks Apps deploy per-folder, so both apps still ship a local `weather_broker.py`;
+the sync script is the single source of truth to prevent drift.
 
 ## Local setup
 
 ```bash
-cd mcp_server
-pip install -r requirements.txt
-python test_weather.py
-python weather_mcp_server.py    # MCP on :8000 (path /mcp)
+python scripts/sync_shared.py
+cd mcp_server && pip install -r requirements.txt && python test_weather.py
+python weather_mcp_server.py
 ```
 
-```bash
-cd dashboard
-pip install -r requirements.txt
-python app.py                   # UI on :8001
-```
-
-## Sync GitHub ↔ Databricks App
+Agent transcript demos (needs workspace PAT):
 
 ```bash
 export DATABRICKS_HOST=https://dbc-da72c144-83db.cloud.databricks.com
 export DATABRICKS_TOKEN=<pat>
+pip install openai 'databricks-sdk[openai]'
+python scripts/run_agent_demos.py
+```
 
+## Register MCP in Agent Bricks (UI — for screenshot credit)
+
+1. **AI Playground** → Tools-enabled model → **Tools → MCP Servers** →  
+   `https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com/mcp`
+2. **Agents → Agent Bricks → Create agent** → attach MCP tools → paste `agent/SYSTEM_PROMPT.md`
+3. Screenshot config + 3 chats (Chicago / Seattle / Nowhereville) → `docs/demos/screenshots/`
+
+Detailed click-path: see prior agent message / `docs/demos/FEEDBACK_REMEDIATION.md`.
+
+## Sync GitHub ↔ Databricks
+
+```bash
+python scripts/sync_shared.py
 databricks sync --full . /Users/sandeeptidke.work@gmail.com/weather-mcp-server
 databricks apps deploy mcp-weather-forecast \
   --source-code-path /Workspace/Users/sandeeptidke.work@gmail.com/weather-mcp-server/mcp_server \
   --mode SNAPSHOT
-databricks repos update /Users/sandeeptidke.work@gmail.com/weather-mcp-server-repo --branch develop
 ```
 
-## Register MCP + Agent Bricks (UI)
+## Demo transcripts
 
-1. **AI Playground** → tools-enabled model → **Add tool → MCP Servers** →  
-   `https://mcp-weather-forecast-7474653382320337.aws.databricksapps.com/mcp`
-2. Or **AI Gateway → MCPs → Register** (Unity Catalog MCP Service) with the same URL.
-3. **Agents → Agent Bricks → Create agent** (Custom LLM).
-4. Attach MCP tools; paste [`agent/SYSTEM_PROMPT.md`](agent/SYSTEM_PROMPT.md).
-5. Evaluate with prompts in [`agent/AGENT_CONFIG.md`](agent/AGENT_CONFIG.md).
-
-## Demo questions
-
-1. What's the weather in Chicago right now?
-2. Will it rain in Austin this weekend?
-3. Should I bring a jacket and umbrella to Seattle tomorrow?
-
-Live tool outputs + agent-style answers: [`SUBMISSION.md`](SUBMISSION.md).
-
-## License / data use
-
-Open-Meteo non-commercial free tier (~10k calls/day). NWS data is public domain.
+See [`docs/demos/AGENT_TRANSCRIPTS.md`](docs/demos/AGENT_TRANSCRIPTS.md) and [`SUBMISSION.md`](SUBMISSION.md).
